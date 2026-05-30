@@ -43,7 +43,7 @@ function updateProgressBar(progress, label) {
 }
 
 function updateStageIndicators(currentStage) {
-    const stages = ['downloading', 'transcribing', 'analyzing', 'editing'];
+    const stages = ['downloading', 'transcribing', 'analyzing', 'ready_for_review', 'editing'];
     const currentIndex = stages.indexOf(currentStage);
 
     stages.forEach((stage, i) => {

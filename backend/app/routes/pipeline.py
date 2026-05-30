@@ -9,7 +9,9 @@ from app.auth import get_token_from_query, verify_token
 from app.config import settings
 from app.models import (
     ClipDuration,
+    ConfirmHighlightsRequest,
     EnhancementOptions,
+    HighlightSegment,
     JobStatus,
     OutputVideo,
     ProcessRequest,
@@ -24,6 +26,9 @@ from app.utils.files import create_job_dir, get_output_path
 router = APIRouter(prefix="/api")
 
 jobs: dict[str, JobStatus] = {}
+
+# Store pipeline context between phases
+pipeline_context: dict[str, dict] = {}
 
 
 def _active_job_count() -> int:
@@ -69,19 +74,53 @@ async def start_process(
         video_info=info,
     )
 
+    pipeline_context[job_id] = {
+        "url": request.url,
+        "job_dir": job_dir,
+        "clip_duration": request.clip_duration,
+        "subtitle_lang": request.subtitle_lang,
+        "aspect_ratio": request.aspect_ratio,
+        "enhancement": request.enhancement,
+    }
+
     bg.add_task(
-        run_pipeline,
+        run_phase1,
         job_id,
         request.url,
         job_dir,
         request.clip_duration,
-        request.subtitle_lang,
-        request.aspect_ratio,
         request.num_highlights,
-        request.enhancement,
     )
 
     return {"job_id": job_id}
+
+
+@router.post("/confirm/{job_id}")
+async def confirm_highlights(
+    job_id: str,
+    request: ConfirmHighlightsRequest,
+    bg: BackgroundTasks,
+    _: str = Depends(verify_token),
+):
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.stage != PipelineStage.READY_FOR_REVIEW:
+        raise HTTPException(status_code=400, detail="Job not ready for review")
+
+    ctx = pipeline_context.get(job_id)
+    if not ctx:
+        raise HTTPException(status_code=400, detail="Pipeline context lost")
+
+    # Update highlights with user edits
+    job.highlights = request.highlights
+
+    bg.add_task(
+        run_phase2,
+        job_id,
+    )
+
+    return {"status": "confirmed", "highlights": len(request.highlights)}
 
 
 @router.get("/status/{job_id}")
@@ -135,19 +174,16 @@ def _update_job(job_id: str, stage: PipelineStage, progress: int, message: str):
         jobs[job_id].message = message
 
 
-async def run_pipeline(
+# ── Phase 1: Download → Transcribe → Detect ──────────────────────
+
+async def run_phase1(
     job_id: str,
     url: str,
     job_dir: Path,
     clip_duration: ClipDuration,
-    subtitle_lang: SubtitleLang,
-    aspect_ratio: AspectRatio,
     num_highlights: int,
-    enhancement: EnhancementOptions,
 ):
     try:
-        output_dir = get_output_path(job_id)
-
         # Step 1: Download
         _update_job(job_id, PipelineStage.DOWNLOADING, 10, "Downloading video...")
         video_path = job_dir / "video.mp4"
@@ -158,8 +194,12 @@ async def run_pipeline(
         audio_path = await asyncio.to_thread(extract_audio, video_path)
         transcript = await asyncio.to_thread(transcriber.transcribe, audio_path)
 
+        # Store for phase 2
+        pipeline_context[job_id]["video_path"] = video_path
+        pipeline_context[job_id]["transcript"] = transcript
+
         # Step 3: Detect highlights
-        _update_job(job_id, PipelineStage.ANALYZING, 50, "Analyzing highlights...")
+        _update_job(job_id, PipelineStage.ANALYZING, 60, "Analyzing highlights...")
         audio_data, sample_rate = await asyncio.to_thread(load_audio, audio_path)
         highlights = await asyncio.to_thread(
             highlighter.detect_highlights,
@@ -172,15 +212,44 @@ async def run_pipeline(
         jobs[job_id].highlights = highlights
 
         if not highlights:
+            pipeline_context.pop(job_id, None)
             _update_job(job_id, PipelineStage.COMPLETE, 100, "No highlights detected in this video.")
             return
 
-        # Step 4: Produce one video per highlight
+        # Pause — wait for user to review/edit
+        _update_job(job_id, PipelineStage.READY_FOR_REVIEW, 70, f"Found {len(highlights)} highlights. Review and confirm.")
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"\n{'='*60}")
+        print(f"PIPELINE PHASE 1 ERROR for job {job_id}")
+        print(f"{'='*60}")
+        print(tb)
+        print(f"{'='*60}\n")
+        pipeline_context.pop(job_id, None)
+        _update_job(job_id, PipelineStage.ERROR, 0, f"Error: {str(e)}")
+
+
+# ── Phase 2: Edit → Enhance → Output ─────────────────────────────
+
+async def run_phase2(job_id: str):
+    try:
+        ctx = pipeline_context.get(job_id)
+        if not ctx:
+            _update_job(job_id, PipelineStage.ERROR, 0, "Pipeline context lost")
+            return
+
+        output_dir = get_output_path(job_id)
+        video_path = ctx["video_path"]
+        transcript = ctx["transcript"]
+        enhancement = ctx["enhancement"]
+        highlights = jobs[job_id].highlights
+
         total = len(highlights)
         outputs = []
 
         for i, hl in enumerate(highlights):
-            pct = 65 + int((i / total) * 30)
+            pct = 75 + int((i / total) * 22)
             _update_job(
                 job_id, PipelineStage.EDITING, pct,
                 f"Processing highlight {i + 1}/{total}...",
@@ -188,22 +257,22 @@ async def run_pipeline(
 
             # Cut segment
             segment_paths = await asyncio.to_thread(
-                editor.cut_segments, video_path, [hl], job_dir
+                editor.cut_segments, video_path, [hl], ctx["job_dir"]
             )
 
-            # Generate SRT for this highlight
+            # Generate SRT
             srt_path = output_dir / f"highlight_{i:03d}.srt"
             await asyncio.to_thread(
                 subtitle.generate_srt, [hl], transcript, srt_path
             )
 
-            # Burn subtitles into segment
+            # Burn subtitles
             sub_path = output_dir / f"highlight_{i:03d}_sub.mp4"
             await asyncio.to_thread(
                 editor.burn_subtitles, segment_paths[0], srt_path, sub_path
             )
 
-            # Enhance video quality
+            # Enhance
             final_path = output_dir / f"highlight_{i:03d}.mp4"
             has_enhancement = any([
                 enhancement.upscale,
@@ -213,7 +282,7 @@ async def run_pipeline(
             ])
             if has_enhancement:
                 _update_job(
-                    job_id, PipelineStage.EDITING, pct + 2,
+                    job_id, PipelineStage.EDITING, pct + 1,
                     f"Enhancing highlight {i + 1}/{total}...",
                 )
                 await asyncio.to_thread(
@@ -229,7 +298,7 @@ async def run_pipeline(
             else:
                 sub_path.rename(final_path)
 
-            # Clean up temp segment
+            # Cleanup
             for p in segment_paths:
                 p.unlink(missing_ok=True)
 
@@ -243,11 +312,15 @@ async def run_pipeline(
         _update_job(job_id, PipelineStage.COMPLETE, 100, f"Done! {total} highlight clips ready.")
         jobs[job_id].output_ready = True
 
+        # Cleanup context
+        pipeline_context.pop(job_id, None)
+
     except Exception as e:
         tb = traceback.format_exc()
         print(f"\n{'='*60}")
-        print(f"PIPELINE ERROR for job {job_id}")
+        print(f"PIPELINE PHASE 2 ERROR for job {job_id}")
         print(f"{'='*60}")
         print(tb)
         print(f"{'='*60}\n")
+        pipeline_context.pop(job_id, None)
         _update_job(job_id, PipelineStage.ERROR, 0, f"Error: {str(e)}")

@@ -165,7 +165,7 @@
                 </div>
 
                 <!-- Pipeline Stages -->
-                <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                <div class="grid grid-cols-5 gap-2 text-center text-xs">
                     <div id="stage-downloading" class="stage-indicator p-2 rounded-lg bg-dark-800 text-dark-500">
                         Download
                     </div>
@@ -174,6 +174,9 @@
                     </div>
                     <div id="stage-analyzing" class="stage-indicator p-2 rounded-lg bg-dark-800 text-dark-500">
                         Analyze
+                    </div>
+                    <div id="stage-ready_for_review" class="stage-indicator p-2 rounded-lg bg-dark-800 text-dark-500">
+                        Review
                     </div>
                     <div id="stage-editing" class="stage-indicator p-2 rounded-lg bg-dark-800 text-dark-500">
                         Edit
@@ -184,18 +187,36 @@
             </div>
         </section>
 
-        <!-- Step 4: Highlights Review -->
-        <section id="step-highlights" class="step hidden mt-6">
+        <!-- Step 4: Highlight Editor -->
+        <section id="step-review" class="step hidden mt-6">
             <div class="bg-dark-900 rounded-2xl p-6 border border-dark-700">
-                <h2 class="text-xl font-semibold mb-4">4. Detected Highlights</h2>
-                <div id="highlights-list" class="space-y-2 max-h-64 overflow-y-auto"></div>
+                <h2 class="text-xl font-semibold mb-4">4. Review & Edit Highlights</h2>
+                <p class="text-dark-400 text-sm mb-4">Adjust timestamps, add, or remove highlights before processing.</p>
+                <div id="editor-list" class="space-y-3"></div>
+                <div class="flex gap-3 mt-4">
+                    <button
+                        onclick="addHighlight()"
+                        class="bg-dark-700 hover:bg-dark-600 text-dark-200 px-4 py-2 rounded-lg text-sm transition-colors"
+                    >
+                        + Add Highlight
+                    </button>
+                    <button
+                        onclick="confirmHighlights()"
+                        class="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 rounded-lg font-medium transition-all"
+                    >
+                        Confirm & Process
+                    </button>
+                </div>
             </div>
         </section>
 
         <!-- Step 5: Preview & Download -->
         <section id="step-preview" class="step hidden mt-6">
+
+        <!-- Step 5: Preview & Download -->
+        <section id="step-preview" class="step hidden mt-6">
             <div class="bg-dark-900 rounded-2xl p-6 border border-dark-700">
-                <h2 class="text-xl font-semibold mb-4">5. Preview & Download</h2>
+                <h2 class="text-xl font-semibold mb-4">5. Download</h2>
                 <div id="clips-container" class="space-y-4"></div>
                 <button
                     onclick="resetApp()"

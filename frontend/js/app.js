@@ -1,7 +1,7 @@
 let currentJobId = null;
 let currentUrl = null;
 let pollInterval = null;
-let highlightsRendered = false;
+let editorHighlights = [];
 
 async function initToken() {
     if (getToken()) return;
@@ -14,14 +14,14 @@ async function initToken() {
             }
         }
     } catch (_) {
-        // ignore — will fail on 401 later
+        // ignore
     }
 }
 
 function resetApp() {
     currentJobId = null;
     currentUrl = null;
-    highlightsRendered = false;
+    editorHighlights = [];
     if (pollInterval) {
         clearInterval(pollInterval);
         pollInterval = null;
@@ -82,7 +82,7 @@ async function startProcessing() {
         audio_normalize: document.getElementById('enh-audio').checked,
     };
 
-    highlightsRendered = false;
+    editorHighlights = [];
     hideAllSteps();
     showStep('step-processing');
     updateProgressBar(0, 'Starting...');
@@ -114,12 +114,10 @@ function handleStatusUpdate(status) {
     updateProgressBar(status.progress, status.message);
     updateStageIndicators(status.stage);
 
-    if (status.highlights && status.highlights.length > 0 && !highlightsRendered) {
-        renderHighlights(status.highlights);
-        highlightsRendered = true;
-    }
-
-    if (status.stage === 'complete') {
+    if (status.stage === 'ready_for_review') {
+        clearInterval(pollInterval);
+        showEditor(status.highlights || []);
+    } else if (status.stage === 'complete') {
         clearInterval(pollInterval);
         showPreview(currentJobId, status.outputs || []);
     } else if (status.stage === 'error') {
@@ -127,6 +125,113 @@ function handleStatusUpdate(status) {
         showError(status.message);
     }
 }
+
+// ── Highlight Editor ─────────────────────────────────────────────
+
+function showEditor(highlights) {
+    editorHighlights = highlights.map(h => ({ ...h }));
+    renderEditor();
+    hideAllSteps();
+    showStep('step-review');
+}
+
+function renderEditor() {
+    const container = document.getElementById('editor-list');
+    container.innerHTML = '';
+
+    editorHighlights.forEach((hl, i) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 bg-dark-800 rounded-lg p-3 border border-dark-600';
+
+        row.innerHTML = `
+            <span class="text-dark-500 text-sm font-mono w-6">${i + 1}</span>
+            <div class="flex gap-2 flex-1">
+                <div class="flex flex-col">
+                    <label class="text-xs text-dark-500">Start</label>
+                    <input type="number" step="0.1" min="0" value="${hl.start.toFixed(1)}"
+                        class="editor-start w-24 bg-dark-700 border border-dark-500 rounded px-2 py-1 text-sm text-dark-100 font-mono"
+                        data-index="${i}">
+                </div>
+                <span class="text-dark-500 self-end pb-1">—</span>
+                <div class="flex flex-col">
+                    <label class="text-xs text-dark-500">End</label>
+                    <input type="number" step="0.1" min="0" value="${hl.end.toFixed(1)}"
+                        class="editor-end w-24 bg-dark-700 border border-dark-500 rounded px-2 py-1 text-sm text-dark-100 font-mono"
+                        data-index="${i}">
+                </div>
+                <div class="flex flex-col flex-1">
+                    <label class="text-xs text-dark-500">Text</label>
+                    <input type="text" value="${escapeHtml(hl.text || '')}"
+                        class="editor-text flex-1 bg-dark-700 border border-dark-500 rounded px-2 py-1 text-sm text-dark-100"
+                        data-index="${i}">
+                </div>
+            </div>
+            <button onclick="removeHighlight(${i})" class="text-red-400 hover:text-red-300 px-2 py-1 text-sm">✕</button>
+        `;
+
+        container.appendChild(row);
+    });
+
+    // Attach change listeners
+    container.querySelectorAll('.editor-start, .editor-end, .editor-text').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const idx = parseInt(e.target.dataset.index);
+            if (e.target.classList.contains('editor-start')) {
+                editorHighlights[idx].start = parseFloat(e.target.value) || 0;
+            } else if (e.target.classList.contains('editor-end')) {
+                editorHighlights[idx].end = parseFloat(e.target.value) || 0;
+            } else if (e.target.classList.contains('editor-text')) {
+                editorHighlights[idx].text = e.target.value;
+            }
+        });
+    });
+}
+
+function addHighlight() {
+    const last = editorHighlights[editorHighlights.length - 1];
+    const newStart = last ? last.end + 1 : 0;
+    editorHighlights.push({
+        start: newStart,
+        end: newStart + 30,
+        score: 0,
+        text: '',
+    });
+    renderEditor();
+}
+
+function removeHighlight(index) {
+    editorHighlights.splice(index, 1);
+    renderEditor();
+}
+
+async function confirmHighlights() {
+    if (editorHighlights.length === 0) {
+        showError('Add at least one highlight');
+        return;
+    }
+
+    // Validate
+    for (let i = 0; i < editorHighlights.length; i++) {
+        const hl = editorHighlights[i];
+        if (hl.end <= hl.start) {
+            showError(`Highlight ${i + 1}: end must be after start`);
+            return;
+        }
+    }
+
+    hideAllSteps();
+    showStep('step-processing');
+    updateProgressBar(70, 'Processing edited highlights...');
+
+    try {
+        await apiConfirmHighlights(currentJobId, editorHighlights);
+        startPolling(currentJobId);
+    } catch (err) {
+        showError(err.message);
+    }
+}
+
+// ── Preview ──────────────────────────────────────────────────────
 
 function showPreview(jobId, outputs) {
     hideAllSteps();
@@ -143,7 +248,6 @@ function showPreview(jobId, outputs) {
         }
     }
 
-    showStep('step-highlights');
     showStep('step-preview');
 }
 

@@ -81,3 +81,20 @@ function apiGetPreviewUrl(jobId, index) {
 function apiGetDownloadUrl(jobId, index) {
     return `${API_BASE}/download/${jobId}/${index}?token=${encodeURIComponent(getToken())}`;
 }
+
+async function apiConfirmHighlights(jobId, highlights) {
+    const res = await fetch(`${API_BASE}/confirm/${jobId}`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ highlights }),
+    });
+    if (res.status === 401) {
+        clearToken();
+        throw new Error('Invalid token');
+    }
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Failed to confirm highlights');
+    }
+    return res.json();
+}

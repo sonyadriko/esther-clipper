@@ -29,6 +29,7 @@ class PipelineStage(str, Enum):
     DOWNLOADING = "downloading"
     TRANSCRIBING = "transcribing"
     ANALYZING = "analyzing"
+    READY_FOR_REVIEW = "ready_for_review"
     EDITING = "editing"
     COMPLETE = "complete"
     ERROR = "error"
@@ -76,8 +77,12 @@ class VideoInfo(BaseModel):
 class HighlightSegment(BaseModel):
     start: float
     end: float
-    score: float
+    score: float = 0.0
     text: str = ""
+
+
+class ConfirmHighlightsRequest(BaseModel):
+    highlights: list[HighlightSegment]
 
 
 class OutputVideo(BaseModel):

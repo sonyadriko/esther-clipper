@@ -1,0 +1,10 @@
+.git
+storage/
+*.md
+.gitignore
+.dockerignore
+frontend/
+__pycache__
+*.pyc
+.venv
+venv

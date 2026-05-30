@@ -10,4 +10,5 @@ services:
       - ./storage:/app/storage
     environment:
       - PYTHONUNBUFFERED=1
+      - API_TOKEN=${API_TOKEN:-videoclipper-local-token}
     restart: unless-stopped

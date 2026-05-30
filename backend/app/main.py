@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.routes.config import router as config_router
 from app.routes.pipeline import router as pipeline_router
 
 app = FastAPI(
@@ -17,6 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(config_router)
 app.include_router(pipeline_router)
 
 app.mount("/", StaticFiles(directory=str(settings.BASE_DIR / "frontend"), html=True), name="frontend")

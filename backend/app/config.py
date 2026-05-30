@@ -2,6 +2,10 @@ import os
 import shutil
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
+
 
 def _find_project_root() -> Path:
     """Find project root by looking for docker-compose.yml or frontend/ dir."""
@@ -57,6 +61,8 @@ class Settings:
     _ffmpeg_path, _ffmpeg_dir = _resolve_ffmpeg()
     FFMPEG_PATH: str = _ffmpeg_path
     FFMPEG_DIR: Path | None = _ffmpeg_dir
+
+    API_TOKEN: str = os.environ.get("API_TOKEN", "videoclipper-local-token")
 
     SUBTITLE_FONT: str = "Arial"
     SUBTITLE_FONTSIZE: int = 24

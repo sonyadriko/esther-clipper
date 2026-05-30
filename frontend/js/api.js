@@ -1,8 +1,33 @@
 const API_BASE = '/api';
 
+function getToken() {
+    return localStorage.getItem('api_token') || '';
+}
+
+function setToken(token) {
+    localStorage.setItem('api_token', token);
+}
+
+function clearToken() {
+    localStorage.removeItem('api_token');
+}
+
+function authHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`,
+    };
+}
+
 async function apiGetVideoInfo(url) {
     const params = new URLSearchParams({ url });
-    const res = await fetch(`${API_BASE}/video-info?${params}`);
+    const res = await fetch(`${API_BASE}/video-info?${params}`, {
+        headers: authHeaders(),
+    });
+    if (res.status === 401) {
+        clearToken();
+        throw new Error('Invalid token');
+    }
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || 'Failed to fetch video info');
@@ -13,7 +38,7 @@ async function apiGetVideoInfo(url) {
 async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, numHighlights) {
     const res = await fetch(`${API_BASE}/process`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
             url,
             clip_duration: clipDuration,
@@ -22,6 +47,10 @@ async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, num
             num_highlights: numHighlights,
         }),
     });
+    if (res.status === 401) {
+        clearToken();
+        throw new Error('Invalid token');
+    }
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || 'Failed to start processing');
@@ -30,7 +59,13 @@ async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, num
 }
 
 async function apiGetStatus(jobId) {
-    const res = await fetch(`${API_BASE}/status/${jobId}`);
+    const res = await fetch(`${API_BASE}/status/${jobId}`, {
+        headers: authHeaders(),
+    });
+    if (res.status === 401) {
+        clearToken();
+        throw new Error('Invalid token');
+    }
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || 'Failed to get status');
@@ -39,9 +74,9 @@ async function apiGetStatus(jobId) {
 }
 
 function apiGetPreviewUrl(jobId, index) {
-    return `${API_BASE}/preview/${jobId}/${index}`;
+    return `${API_BASE}/preview/${jobId}/${index}?token=${encodeURIComponent(getToken())}`;
 }
 
 function apiGetDownloadUrl(jobId, index) {
-    return `${API_BASE}/download/${jobId}/${index}`;
+    return `${API_BASE}/download/${jobId}/${index}?token=${encodeURIComponent(getToken())}`;
 }

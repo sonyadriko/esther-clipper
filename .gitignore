@@ -10,6 +10,9 @@ build/
 .DS_Store
 node_modules/
 .claude/
+*.log
+.pytest_cache/
+htmlcov/
 
 # Storage (temp generated files)
 storage/uploads/*

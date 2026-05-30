@@ -3,6 +3,21 @@ let currentUrl = null;
 let pollInterval = null;
 let highlightsRendered = false;
 
+async function initToken() {
+    if (getToken()) return;
+    try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+            const config = await res.json();
+            if (config.token) {
+                setToken(config.token);
+            }
+        }
+    } catch (_) {
+        // ignore — will fail on 401 later
+    }
+}
+
 function resetApp() {
     currentJobId = null;
     currentUrl = null;
@@ -130,4 +145,4 @@ document.getElementById('url-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') fetchVideoInfo();
 });
 
-resetApp();
+initToken().then(() => resetApp());

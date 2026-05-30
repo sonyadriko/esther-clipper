@@ -2,9 +2,10 @@ import asyncio
 import traceback
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 
+from app.auth import get_token_from_query, verify_token
 from app.config import settings
 from app.models import (
     ClipDuration,
@@ -32,7 +33,7 @@ def _active_job_count() -> int:
 
 
 @router.get("/video-info")
-async def get_video_info(url: str):
+async def get_video_info(url: str, _: str = Depends(verify_token)):
     try:
         info = downloader.get_video_info(url)
         return info
@@ -41,7 +42,11 @@ async def get_video_info(url: str):
 
 
 @router.post("/process")
-async def start_process(request: ProcessRequest, bg: BackgroundTasks):
+async def start_process(
+    request: ProcessRequest,
+    bg: BackgroundTasks,
+    _: str = Depends(verify_token),
+):
     if _active_job_count() >= settings.MAX_CONCURRENT_JOBS:
         raise HTTPException(
             status_code=429,
@@ -78,7 +83,7 @@ async def start_process(request: ProcessRequest, bg: BackgroundTasks):
 
 
 @router.get("/status/{job_id}")
-async def get_status(job_id: str):
+async def get_status(job_id: str, _: str = Depends(verify_token)):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -86,7 +91,7 @@ async def get_status(job_id: str):
 
 
 @router.get("/preview/{job_id}/{index}")
-async def preview_video(job_id: str, index: int):
+async def preview_video(job_id: str, index: int, _: str = Depends(get_token_from_query)):
     job = jobs.get(job_id)
     if not job or not job.output_ready:
         raise HTTPException(status_code=404, detail="Video not ready")
@@ -100,7 +105,7 @@ async def preview_video(job_id: str, index: int):
 
 
 @router.get("/download/{job_id}/{index}")
-async def download_video(job_id: str, index: int):
+async def download_video(job_id: str, index: int, _: str = Depends(get_token_from_query)):
     job = jobs.get(job_id)
     if not job or not job.output_ready:
         raise HTTPException(status_code=404, detail="Video not ready")

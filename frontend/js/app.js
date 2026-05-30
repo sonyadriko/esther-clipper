@@ -75,6 +75,12 @@ async function startProcessing() {
     const subtitleLang = document.getElementById('subtitle-lang').value;
     const aspectRatio = document.getElementById('aspect-ratio').value;
     const numHighlights = parseInt(document.getElementById('num-highlights').value, 10);
+    const enhancement = {
+        upscale: document.getElementById('enh-upscale').checked,
+        color_correct: document.getElementById('enh-color').checked,
+        denoise: document.getElementById('enh-denoise').checked,
+        audio_normalize: document.getElementById('enh-audio').checked,
+    };
 
     highlightsRendered = false;
     hideAllSteps();
@@ -82,7 +88,7 @@ async function startProcessing() {
     updateProgressBar(0, 'Starting...');
 
     try {
-        const { job_id } = await apiStartProcess(currentUrl, clipDuration, subtitleLang, aspectRatio, numHighlights);
+        const { job_id } = await apiStartProcess(currentUrl, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement);
         currentJobId = job_id;
         startPolling(job_id);
     } catch (err) {

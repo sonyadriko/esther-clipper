@@ -35,7 +35,7 @@ async function apiGetVideoInfo(url) {
     return res.json();
 }
 
-async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, numHighlights) {
+async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement) {
     const res = await fetch(`${API_BASE}/process`, {
         method: 'POST',
         headers: authHeaders(),
@@ -45,6 +45,7 @@ async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, num
             subtitle_lang: subtitleLang,
             aspect_ratio: aspectRatio,
             num_highlights: numHighlights,
+            enhancement,
         }),
     });
     if (res.status === 401) {

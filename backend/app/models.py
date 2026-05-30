@@ -34,12 +34,20 @@ class PipelineStage(str, Enum):
     ERROR = "error"
 
 
+class EnhancementOptions(BaseModel):
+    upscale: bool = True
+    color_correct: bool = True
+    denoise: bool = True
+    audio_normalize: bool = True
+
+
 class ProcessRequest(BaseModel):
     url: str
     clip_duration: ClipDuration = ClipDuration.SHORT
     subtitle_lang: SubtitleLang = SubtitleLang.INDONESIAN
     aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE
     num_highlights: int = 3
+    enhancement: EnhancementOptions = EnhancementOptions()
 
     @field_validator("num_highlights")
     @classmethod

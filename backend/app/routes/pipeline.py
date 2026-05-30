@@ -9,6 +9,7 @@ from app.auth import get_token_from_query, verify_token
 from app.config import settings
 from app.models import (
     ClipDuration,
+    EnhancementOptions,
     JobStatus,
     OutputVideo,
     ProcessRequest,
@@ -16,7 +17,7 @@ from app.models import (
     AspectRatio,
     PipelineStage,
 )
-from app.services import downloader, transcriber, highlighter, subtitle, editor
+from app.services import downloader, transcriber, highlighter, subtitle, editor, enhancer
 from app.utils.audio import extract_audio, load_audio
 from app.utils.files import create_job_dir, get_output_path
 
@@ -77,6 +78,7 @@ async def start_process(
         request.subtitle_lang,
         request.aspect_ratio,
         request.num_highlights,
+        request.enhancement,
     )
 
     return {"job_id": job_id}
@@ -141,6 +143,7 @@ async def run_pipeline(
     subtitle_lang: SubtitleLang,
     aspect_ratio: AspectRatio,
     num_highlights: int,
+    enhancement: EnhancementOptions,
 ):
     try:
         output_dir = get_output_path(job_id)
@@ -195,10 +198,36 @@ async def run_pipeline(
             )
 
             # Burn subtitles into segment
-            final_path = output_dir / f"highlight_{i:03d}.mp4"
+            sub_path = output_dir / f"highlight_{i:03d}_sub.mp4"
             await asyncio.to_thread(
-                editor.burn_subtitles, segment_paths[0], srt_path, final_path
+                editor.burn_subtitles, segment_paths[0], srt_path, sub_path
             )
+
+            # Enhance video quality
+            final_path = output_dir / f"highlight_{i:03d}.mp4"
+            has_enhancement = any([
+                enhancement.upscale,
+                enhancement.color_correct,
+                enhancement.denoise,
+                enhancement.audio_normalize,
+            ])
+            if has_enhancement:
+                _update_job(
+                    job_id, PipelineStage.EDITING, pct + 2,
+                    f"Enhancing highlight {i + 1}/{total}...",
+                )
+                await asyncio.to_thread(
+                    enhancer.enhance_video,
+                    sub_path,
+                    final_path,
+                    enhancement.upscale,
+                    enhancement.color_correct,
+                    enhancement.denoise,
+                    enhancement.audio_normalize,
+                )
+                sub_path.unlink(missing_ok=True)
+            else:
+                sub_path.rename(final_path)
 
             # Clean up temp segment
             for p in segment_paths:

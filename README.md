@@ -1,15 +1,22 @@
 # VideoClipper AI
 
-Automated YouTube highlight extractor — paste a YouTube link, get a highlight clip with AI-generated subtitles.
+Automated YouTube highlight extractor — paste a YouTube link, get highlight clips with subtitles.
 
 ## Features
 
 - **YouTube Download** — paste any public YouTube URL
-- **AI Transcription** — Whisper-powered speech-to-text with word-level timestamps
-- **Highlight Detection** — rule-based analysis using audio energy and silence detection
-- **Auto Editing** — cuts, concatenates, and adds smooth transitions
-- **Subtitles** — auto-generated SRT burned into video
-- **Dark UI** — single-page workflow with real-time progress tracking
+- **Two Detection Modes:**
+  - **Fast** — rule-based audio energy analysis. Best for streams, reactions, debates.
+  - **Smart** — LLM semantic analysis (OpenAI GPT-4o-mini / Anthropic Claude). Best for podcasts, interviews, tutorials.
+- **Manual Highlight Editing** — review, add, remove, or adjust timestamps before processing
+- **Per-Highlight Output** — each highlight becomes a separate video (configurable 1-10 clips)
+- **Auto Subtitles** — SRT generation with word-level timestamps from Whisper
+- **Karaoke Subtitles** — word-by-word ASS animation (toggle)
+- **Video Enhancement** — upscale to 1080p, color correction, denoise, audio normalization (toggles)
+- **Intro/Outro Overlays** — add text overlays at start/end of each clip
+- **SRT Export** — download .srt file per highlight
+- **Aspect Ratio** — 16:9 standard or 9:16 Shorts/Reels
+- **Dark UI** — single-page workflow with real-time progress
 
 ## Tech Stack
 
@@ -17,26 +24,40 @@ Automated YouTube highlight extractor — paste a YouTube link, get a highlight 
 |-------|-----------|
 | Backend | Python 3.11 + FastAPI |
 | Frontend | HTML + Tailwind CSS + vanilla JS |
-| Video Download | yt-dlp |
+| YouTube | yt-dlp |
 | Transcription | OpenAI Whisper (local) |
+| Highlight Detection | NumPy (Fast) / OpenAI API or Anthropic API (Smart) |
 | Video Processing | FFmpeg |
-| Highlight Detection | NumPy + SciPy (audio energy analysis) |
+
+## Prerequisites
+
+- Python 3.11+
+- FFmpeg installed and in PATH
+- ~2GB disk space (Whisper model + temp files)
+- For Smart mode: OpenAI or Anthropic API key
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.11+
-- FFmpeg installed and in PATH (or set `FFMPEG_PATH` env var)
-
-### Install
+### 1. Install Dependencies
 
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-### Run
+### 2. Configure
+
+Edit `.env`:
+
+```env
+API_TOKEN=your-secret-token
+
+# For Smart detection mode (optional)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 3. Run
 
 From the **project root**:
 
@@ -52,25 +73,19 @@ Open `http://localhost:8000`
 docker-compose up --build
 ```
 
-Open `http://localhost:8000`
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FFMPEG_PATH` | auto-detect | Path to ffmpeg binary |
-| `PROJECT_DIR` | auto-detect | Project root directory |
-| `WHISPER_MODEL` | `base` | Whisper model size (`tiny`, `base`, `small`, `medium`, `large`) |
-
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/video-info?url=` | Fetch YouTube video metadata |
-| `POST` | `/api/process` | Start highlight extraction pipeline |
-| `GET` | `/api/status/{job_id}` | Poll processing progress |
-| `GET` | `/api/preview/{job_id}` | Stream output video |
-| `GET` | `/api/download/{job_id}` | Download final MP4 |
+| `POST` | `/api/process` | Start pipeline (Phase 1: detect) |
+| `POST` | `/api/confirm/{job_id}` | Confirm edited highlights (Phase 2: process) |
+| `GET` | `/api/status/{job_id}` | Poll progress |
+| `GET` | `/api/preview/{job_id}/{index}` | Stream video |
+| `GET` | `/api/download/{job_id}/{index}` | Download MP4 |
+| `GET` | `/api/download-srt/{job_id}/{index}` | Download SRT |
+
+All endpoints require `Authorization: Bearer <token>` header (except video/download which use `?token=` query param).
 
 ### POST /api/process
 
@@ -79,44 +94,37 @@ Open `http://localhost:8000`
   "url": "https://youtube.com/watch?v=...",
   "clip_duration": "short",
   "subtitle_lang": "id",
-  "aspect_ratio": "16:9"
+  "aspect_ratio": "16:9",
+  "num_highlights": 3,
+  "detection_mode": "fast",
+  "llm": {
+    "provider": "openai",
+    "api_key": "",
+    "model": ""
+  },
+  "enhancement": {
+    "upscale": true,
+    "color_correct": true,
+    "denoise": true,
+    "audio_normalize": true,
+    "karaoke_subs": false,
+    "add_intro": false,
+    "add_outro": false
+  },
+  "intro_outro": {
+    "intro_text": "",
+    "outro_text": ""
+  }
 }
 ```
 
-**Parameters:**
-- `clip_duration`: `short` (30-60s), `medium` (2-5min), `long` (5-15min)
-- `subtitle_lang`: `id` (Indonesian), `en` (English)
-- `aspect_ratio`: `16:9` (standard), `9:16` (Shorts/Reels)
-
-## Pipeline Flow
+### Pipeline Stages
 
 ```
-YouTube URL
-    |
-    v
-[yt-dlp] Download video
-    |
-    v
-[FFmpeg] Extract audio (16kHz WAV)
-    |
-    v
-[Whisper] Transcribe with timestamps
-    |
-    v
-[NumPy] Analyze audio energy + silence gaps
-    |
-    v
-[Rule Engine] Select top highlight segments
-    |
-    v
-[FFmpeg] Cut & concatenate segments
-    |
-    v
-[FFmpeg] Generate SRT & burn subtitles
-    |
-    v
-Final MP4 with subtitles
+downloading → transcribing → analyzing → ready_for_review → editing → complete
 ```
+
+The pipeline pauses at `ready_for_review` for user to edit highlights via `POST /api/confirm/{job_id}`.
 
 ## Project Structure
 
@@ -127,13 +135,19 @@ shortez/
 │   │   ├── main.py              # FastAPI app
 │   │   ├── config.py            # Settings
 │   │   ├── models.py            # Pydantic schemas
-│   │   ├── routes/pipeline.py   # API endpoints
+│   │   ├── auth.py              # Bearer token auth
+│   │   ├── routes/
+│   │   │   ├── pipeline.py      # API endpoints + pipeline
+│   │   │   └── config.py        # Config endpoint
 │   │   ├── services/
-│   │   │   ├── downloader.py    # yt-dlp wrapper
+│   │   │   ├── downloader.py    # YouTube download
 │   │   │   ├── transcriber.py   # Whisper transcription
-│   │   │   ├── highlighter.py   # Highlight detection
+│   │   │   ├── highlighter.py   # Rule-based detection
+│   │   │   ├── llm_highlighter.py # LLM detection
 │   │   │   ├── editor.py        # FFmpeg video editing
-│   │   │   └── subtitle.py      # SRT generation
+│   │   │   ├── subtitle.py      # SRT generation
+│   │   │   ├── karaoke.py       # ASS karaoke generation
+│   │   │   └── enhancer.py      # Video enhancement
 │   │   └── utils/
 │   │       ├── audio.py         # Audio analysis
 │   │       └── files.py         # File management
@@ -146,27 +160,46 @@ shortez/
 │       ├── api.js               # API client
 │       ├── components.js        # UI helpers
 │       └── app.js               # App logic
+├── .env                         # Config (gitignored)
+├── .env.example
 ├── docker-compose.yml
 └── storage/                     # Temp files (gitignored)
 ```
 
-## Highlight Detection Algorithm
+## Detection Modes
 
-1. **Audio Energy** — compute RMS energy per 1-second window
-2. **Silence Detection** — find gaps below -30dB lasting > 0.5s
-3. **Speech Segments** — identify continuous speech regions
-4. **Scoring** — rank segments by energy level + speech density
-5. **Selection** — pick top segments to fill target duration, snapped to silence boundaries
+### Fast (Rule-Based)
+- Computes RMS audio energy per 1-second window
+- Detects silence gaps for clean cut points
+- Scores segments by energy + speech density
+- Free, instant, no API key needed
 
-## Limitations (MVP)
+### Smart (LLM)
+- Sends full transcript to LLM
+- AI identifies jokes, hot takes, emotional peaks, quotable moments
+- Returns ranked segments with reasons
+- Requires API key (OpenAI or Anthropic)
+- Costs ~$0.03-0.10 per video
 
-- No video quality enhancement (upscaling, color correction)
-- No LLM-based highlight detection (uses audio energy only)
-- No translation (subtitles in source language only)
-- No user accounts or rate limiting
+## Enhancement Options
+
+| Toggle | Effect |
+|--------|--------|
+| Upscale 1080p | Sharp upscale via lanczos filter |
+| Color Fix | Brightness +0.04, contrast 1.1, saturation 1.15 |
+| Denoise | hqdn3d noise reduction |
+| Audio Norm | EBU R128 loudness normalization (-16 LUFS) |
+| Karaoke Subs | Word-by-word ASS subtitle animation |
+| Intro/Outro | Text overlay at start/end of clip |
+
+## Limitations
+
 - In-memory job storage (lost on restart)
+- No user accounts (single API token)
+- No video quality enhancement beyond FFmpeg filters
+- No subtitle translation (source language only)
 
 ## License
 
 MIT
-"# esther-clipper" 
+"# esther-clipper"

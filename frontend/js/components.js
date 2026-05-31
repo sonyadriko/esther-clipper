@@ -64,37 +64,6 @@ function renderVideoInfo(info) {
     document.getElementById('video-duration').textContent = `Duration: ${formatDuration(info.duration)}`;
 }
 
-function renderHighlights(highlights) {
-    const container = document.getElementById('highlights-list');
-    container.innerHTML = '';
-    for (const h of highlights) {
-        const item = document.createElement('div');
-        item.className = 'highlight-item flex items-center justify-between p-3 rounded-lg bg-dark-800';
-
-        const info = document.createElement('div');
-        info.className = 'flex-1';
-
-        const time = document.createElement('span');
-        time.className = 'text-blue-400 font-mono text-sm';
-        time.textContent = `${formatTime(h.start)} — ${formatTime(h.end)}`;
-
-        const text = document.createElement('p');
-        text.className = 'text-dark-300 text-sm mt-1 line-clamp-2';
-        text.textContent = h.text || 'No transcript';
-
-        info.appendChild(time);
-        info.appendChild(text);
-
-        const score = document.createElement('span');
-        score.className = 'text-dark-500 text-xs ml-3';
-        score.textContent = `Score: ${h.score}`;
-
-        item.appendChild(info);
-        item.appendChild(score);
-        container.appendChild(item);
-    }
-}
-
 function renderClipCard(jobId, output) {
     const card = document.createElement('div');
     card.className = 'bg-dark-800 rounded-xl p-4 border border-dark-600';

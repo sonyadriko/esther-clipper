@@ -31,7 +31,7 @@ def _get_words_in_range(
         if seg.end < start or seg.start > end:
             continue
         for w in seg.words:
-            if w.end >= start and w.start <= start + (end - start) * 1.5:
+            if w.end >= start and w.start <= end:
                 words.append((w.word, w.start - start, w.end - start))
     return words
 

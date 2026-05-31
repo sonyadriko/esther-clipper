@@ -11,13 +11,17 @@ def enhance_video(
     color_correct: bool = True,
     denoise: bool = True,
     audio_normalize: bool = True,
+    aspect_ratio: str = "16:9",
 ) -> Path:
     """Enhance video using FFmpeg filters. Only processes enabled filters."""
     filters_v = []
     filters_a = []
 
     if upscale:
-        filters_v.append("scale=-2:1080:flags=lanczos")
+        if aspect_ratio == "9:16":
+            filters_v.append("scale=1080:1920:flags=lanczos")
+        else:
+            filters_v.append("scale=-2:1080:flags=lanczos")
 
     if color_correct:
         filters_v.append("eq=brightness=0.04:contrast=1.1:saturation=1.15")

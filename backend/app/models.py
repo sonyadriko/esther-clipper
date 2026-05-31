@@ -57,7 +57,6 @@ class EnhancementOptions(BaseModel):
     denoise: bool = True
     audio_normalize: bool = True
     karaoke_subs: bool = False
-    export_srt: bool = False
     add_intro: bool = False
     add_outro: bool = False
 
@@ -103,10 +102,38 @@ class VideoInfo(BaseModel):
 
 
 class HighlightSegment(BaseModel):
-    start: float
-    end: float
+    start: float = 0.0
+    end: float = 0.0
     score: float = 0.0
     text: str = ""
+
+    @field_validator("start")
+    @classmethod
+    def validate_start(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Start must be >= 0")
+        return v
+
+    @field_validator("end")
+    @classmethod
+    def validate_end(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("End must be >= 0")
+        return v
+
+    @field_validator("start")
+    @classmethod
+    def validate_start(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Start must be >= 0")
+        return v
+
+    @field_validator("end")
+    @classmethod
+    def validate_end(cls, v: float, info) -> float:
+        if "start" in info.data and v <= info.data["start"]:
+            raise ValueError("End must be greater than start")
+        return v
 
 
 class ConfirmHighlightsRequest(BaseModel):

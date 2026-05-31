@@ -172,13 +172,12 @@ def _parse_response(
     try:
         items = json.loads(text)
     except json.JSONDecodeError:
-        # Try to find JSON array in text
         start = text.find("[")
-        end = text.rfind("]") + 1
-        if start >= 0 and end > start:
-            items = json.loads(text[start:end])
+        end_idx = text.rfind("]") + 1
+        if start >= 0 and end_idx > start:
+            items = json.loads(text[start:end_idx])
         else:
-            return []
+            raise RuntimeError(f"LLM returned unparseable response: {text[:200]}")
 
     highlights = []
     for item in items[:num_highlights]:

@@ -36,12 +36,12 @@ def load_audio_for_whisper(audio_path: Path) -> np.ndarray:
     return audio
 
 
-def transcribe(audio_path: Path) -> list[TranscriptSegment]:
+def transcribe(audio_path: Path, language: str | None = None) -> list[TranscriptSegment]:
     model = get_model()
     audio = load_audio_for_whisper(audio_path)
     result = model.transcribe(
         audio,
-        language=None,
+        language=language,
         word_timestamps=True,
         verbose=False,
     )

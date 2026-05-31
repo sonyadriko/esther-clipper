@@ -42,8 +42,11 @@ def _active_job_count() -> int:
 
 @router.get("/video-info")
 async def get_video_info(url: str, _: str = Depends(verify_token)):
+    from app.models import YOUTUBE_URL_PATTERN
+    if not url or not YOUTUBE_URL_PATTERN.match(url.strip()):
+        raise HTTPException(status_code=400, detail="Must be a valid YouTube URL")
     try:
-        info = downloader.get_video_info(url)
+        info = downloader.get_video_info(url.strip())
         return info
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -223,7 +226,9 @@ async def run_phase1(
 
         _update_job(job_id, PipelineStage.TRANSCRIBING, 30, "Transcribing audio...")
         audio_path = await asyncio.to_thread(extract_audio, video_path)
-        transcript = await asyncio.to_thread(transcriber.transcribe, audio_path)
+        whisper_lang = ctx.get("subtitle_lang")
+        lang_code = whisper_lang.value if whisper_lang else None
+        transcript = await asyncio.to_thread(transcriber.transcribe, audio_path, lang_code)
 
         pipeline_context[job_id]["video_path"] = video_path
         pipeline_context[job_id]["transcript"] = transcript
@@ -274,6 +279,7 @@ async def run_phase2(job_id: str):
         transcript = ctx["transcript"]
         enhancement: EnhancementOptions = ctx["enhancement"]
         intro_outro: IntroOutroOptions = ctx["intro_outro"]
+        aspect_ratio = ctx.get("aspect_ratio", "16:9")
         highlights = jobs[job_id].highlights
 
         total = len(highlights)
@@ -284,7 +290,9 @@ async def run_phase2(job_id: str):
             _update_job(job_id, PipelineStage.EDITING, pct, f"Processing highlight {i + 1}/{total}...")
 
             # Cut segment
-            segment_paths = await asyncio.to_thread(editor.cut_segments, video_path, [hl], ctx["job_dir"])
+            aspect = ctx.get("aspect_ratio", AspectRatio.LANDSCAPE)
+            aspect_val = aspect.value if hasattr(aspect, "value") else aspect
+            segment_paths = await asyncio.to_thread(editor.cut_segments, video_path, [hl], ctx["job_dir"], aspect_val)
 
             # Subtitles
             srt_path = output_dir / f"highlight_{i:03d}.srt"
@@ -300,12 +308,14 @@ async def run_phase2(job_id: str):
                 await asyncio.to_thread(editor.burn_subtitles, segment_paths[0], srt_path, sub_path)
 
             # Intro/outro
-            has_intro_outro = intro_outro.intro_text or intro_outro.outro_text
-            if has_intro_outro:
+            has_intro = enhancement.add_intro and intro_outro.intro_text
+            has_outro = enhancement.add_outro and intro_outro.outro_text
+            if has_intro or has_outro:
                 io_path = output_dir / f"highlight_{i:03d}_io.mp4"
                 await asyncio.to_thread(
                     editor.add_intro_outro, sub_path, io_path,
-                    intro_outro.intro_text, intro_outro.outro_text,
+                    intro_outro.intro_text if has_intro else "",
+                    intro_outro.outro_text if has_outro else "",
                 )
                 sub_path.unlink(missing_ok=True)
                 sub_path = io_path
@@ -322,6 +332,7 @@ async def run_phase2(job_id: str):
                     enhancer.enhance_video, sub_path, final_path,
                     enhancement.upscale, enhancement.color_correct,
                     enhancement.denoise, enhancement.audio_normalize,
+                    aspect_ratio,
                 )
                 sub_path.unlink(missing_ok=True)
             else:

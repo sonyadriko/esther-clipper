@@ -15,6 +15,16 @@ class ClipDuration(str, Enum):
     LONG = "long"        # 5-15 min
 
 
+class DetectionMode(str, Enum):
+    FAST = "fast"    # rule-based, audio energy
+    SMART = "smart"  # LLM, semantic analysis
+
+
+class LLMProvider(str, Enum):
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+
+
 class SubtitleLang(str, Enum):
     INDONESIAN = "id"
     ENGLISH = "en"
@@ -33,6 +43,12 @@ class PipelineStage(str, Enum):
     EDITING = "editing"
     COMPLETE = "complete"
     ERROR = "error"
+
+
+class LLMOptions(BaseModel):
+    provider: LLMProvider = LLMProvider.OPENAI
+    api_key: str = ""
+    model: str = ""
 
 
 class EnhancementOptions(BaseModel):
@@ -57,6 +73,8 @@ class ProcessRequest(BaseModel):
     subtitle_lang: SubtitleLang = SubtitleLang.INDONESIAN
     aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE
     num_highlights: int = 3
+    detection_mode: DetectionMode = DetectionMode.FAST
+    llm: LLMOptions = LLMOptions()
     enhancement: EnhancementOptions = EnhancementOptions()
     intro_outro: IntroOutroOptions = IntroOutroOptions()
 

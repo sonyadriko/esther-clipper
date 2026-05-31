@@ -10,17 +10,20 @@ from app.config import settings
 from app.models import (
     ClipDuration,
     ConfirmHighlightsRequest,
+    DetectionMode,
     EnhancementOptions,
     HighlightSegment,
     IntroOutroOptions,
     JobStatus,
+    LLMOptions,
+    LLMProvider,
     OutputVideo,
     ProcessRequest,
     SubtitleLang,
     AspectRatio,
     PipelineStage,
 )
-from app.services import downloader, transcriber, highlighter, subtitle, editor, enhancer, karaoke
+from app.services import downloader, transcriber, highlighter, llm_highlighter, subtitle, editor, enhancer, karaoke
 from app.utils.audio import extract_audio, load_audio
 from app.utils.files import create_job_dir, get_output_path
 
@@ -78,6 +81,8 @@ async def start_process(
         "aspect_ratio": request.aspect_ratio,
         "enhancement": request.enhancement,
         "intro_outro": request.intro_outro,
+        "detection_mode": request.detection_mode,
+        "llm": request.llm,
     }
 
     bg.add_task(
@@ -87,6 +92,8 @@ async def start_process(
         job_dir,
         request.clip_duration,
         request.num_highlights,
+        request.detection_mode,
+        request.llm,
     )
 
     return {"job_id": job_id}
@@ -188,8 +195,28 @@ async def run_phase1(
     job_dir: Path,
     clip_duration: ClipDuration,
     num_highlights: int,
+    detection_mode: DetectionMode,
+    llm_opts: LLMOptions,
 ):
     try:
+        # Validate LLM key upfront if Smart mode selected
+        used_mode = "fast"
+        if detection_mode == DetectionMode.SMART:
+            api_key = llm_highlighter.resolve_api_key(llm_opts.provider, llm_opts.api_key)
+            if not api_key:
+                _update_job(job_id, PipelineStage.ERROR, 0, "Smart mode requires an API key. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env, or enter in UI.")
+                return
+            _update_job(job_id, PipelineStage.DOWNLOADING, 2, f"Validating {llm_opts.provider.value} key...")
+            try:
+                await asyncio.to_thread(
+                    llm_highlighter.validate_api_key, llm_opts.provider, api_key,
+                )
+            except Exception as key_err:
+                _update_job(job_id, PipelineStage.ERROR, 0, f"API key invalid: {str(key_err)[:200]}")
+                return
+            llm_opts.api_key = api_key
+            used_mode = "smart"
+
         _update_job(job_id, PipelineStage.DOWNLOADING, 10, "Downloading video...")
         video_path = job_dir / "video.mp4"
         await asyncio.to_thread(downloader.download_video, url, str(video_path))
@@ -201,14 +228,23 @@ async def run_phase1(
         pipeline_context[job_id]["video_path"] = video_path
         pipeline_context[job_id]["transcript"] = transcript
 
-        _update_job(job_id, PipelineStage.ANALYZING, 60, "Analyzing highlights...")
-        audio_data, sample_rate = await asyncio.to_thread(load_audio, audio_path)
-        highlights = await asyncio.to_thread(
-            highlighter.detect_highlights,
-            audio_data, sample_rate, transcript,
-            clip_duration.value, num_highlights,
-        )
+        if used_mode == "smart":
+            _update_job(job_id, PipelineStage.ANALYZING, 55, f"AI analyzing with {llm_opts.provider.value}...")
+            highlights = await asyncio.to_thread(
+                llm_highlighter.detect_highlights,
+                transcript, clip_duration.value, num_highlights, llm_opts,
+            )
+        else:
+            _update_job(job_id, PipelineStage.ANALYZING, 60, "Analyzing audio energy...")
+            audio_data, sample_rate = await asyncio.to_thread(load_audio, audio_path)
+            highlights = await asyncio.to_thread(
+                highlighter.detect_highlights,
+                audio_data, sample_rate, transcript,
+                clip_duration.value, num_highlights,
+            )
+
         jobs[job_id].highlights = highlights
+        print(f"Job {job_id}: detected {len(highlights)} highlights using {used_mode} mode")
 
         if not highlights:
             pipeline_context.pop(job_id, None)

@@ -64,6 +64,9 @@ class Settings:
 
     API_TOKEN: str = os.environ.get("API_TOKEN", "videoclipper-local-token")
 
+    OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
+    ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")
+
     SUBTITLE_FONT: str = "Arial"
     SUBTITLE_FONTSIZE: int = 24
     SUBTITLE_COLOR: str = "&HFFFFFF"

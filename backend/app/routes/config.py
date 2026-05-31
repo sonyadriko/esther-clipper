@@ -17,4 +17,6 @@ async def get_config(request: Request):
         "app_name": settings.APP_NAME,
         "version": settings.VERSION,
         "token": settings.API_TOKEN,
+        "has_openai_key": bool(settings.OPENAI_API_KEY),
+        "has_anthropic_key": bool(settings.ANTHROPIC_API_KEY),
     }

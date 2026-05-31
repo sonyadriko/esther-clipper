@@ -2,19 +2,38 @@ let currentJobId = null;
 let currentUrl = null;
 let pollInterval = null;
 let editorHighlights = [];
+let appConfig = null;
 
 async function initToken() {
     if (getToken()) return;
     try {
         const res = await fetch('/api/config');
         if (res.ok) {
-            const config = await res.json();
-            if (config.token) {
-                setToken(config.token);
+            appConfig = await res.json();
+            if (appConfig.token) {
+                setToken(appConfig.token);
             }
+            updateProviderHints();
         }
     } catch (_) {
         // ignore
+    }
+}
+
+function updateProviderHints() {
+    if (!appConfig) return;
+    const openaiOpt = document.querySelector('#llm-provider option[value="openai"]');
+    const anthropicOpt = document.querySelector('#llm-provider option[value="anthropic"]');
+
+    if (openaiOpt) {
+        openaiOpt.textContent = appConfig.has_openai_key
+            ? "OpenAI (GPT-4o-mini) ✓"
+            : "OpenAI (GPT-4o-mini)";
+    }
+    if (anthropicOpt) {
+        anthropicOpt.textContent = appConfig.has_anthropic_key
+            ? "Anthropic (Claude Sonnet) ✓"
+            : "Anthropic (Claude Sonnet)";
     }
 }
 
@@ -75,6 +94,7 @@ async function startProcessing() {
     const subtitleLang = document.getElementById('subtitle-lang').value;
     const aspectRatio = document.getElementById('aspect-ratio').value;
     const numHighlights = parseInt(document.getElementById('num-highlights').value, 10);
+    const detectionMode = document.querySelector('input[name="detection-mode"]:checked').value;
     const enhancement = {
         upscale: document.getElementById('enh-upscale').checked,
         color_correct: document.getElementById('enh-color').checked,
@@ -89,6 +109,11 @@ async function startProcessing() {
         intro_text: document.getElementById('intro-text').value.trim(),
         outro_text: document.getElementById('outro-text').value.trim(),
     };
+    const llm = {
+        provider: document.getElementById('llm-provider').value,
+        api_key: document.getElementById('llm-api-key').value.trim(),
+        model: document.getElementById('llm-model').value.trim(),
+    };
 
     editorHighlights = [];
     hideAllSteps();
@@ -96,7 +121,7 @@ async function startProcessing() {
     updateProgressBar(0, 'Starting...');
 
     try {
-        const { job_id } = await apiStartProcess(currentUrl, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement, intro_outro);
+        const { job_id } = await apiStartProcess(currentUrl, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement, intro_outro, detectionMode, llm);
         currentJobId = job_id;
         startPolling(job_id);
     } catch (err) {
@@ -180,7 +205,6 @@ function renderEditor() {
         container.appendChild(row);
     });
 
-    // Attach change listeners
     container.querySelectorAll('.editor-start, .editor-end, .editor-text').forEach(input => {
         input.addEventListener('change', (e) => {
             const idx = parseInt(e.target.dataset.index);
@@ -218,7 +242,6 @@ async function confirmHighlights() {
         return;
     }
 
-    // Validate
     for (let i = 0; i < editorHighlights.length; i++) {
         const hl = editorHighlights[i];
         if (hl.end <= hl.start) {

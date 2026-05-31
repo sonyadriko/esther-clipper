@@ -115,6 +115,73 @@
                     </div>
                 </div>
 
+                <!-- Detection Mode -->
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-dark-300 mb-2">Detection Mode</label>
+                    <div class="flex gap-3">
+                        <label class="flex-1 flex items-center gap-2 bg-dark-800 border border-blue-500 rounded-lg px-4 py-3 cursor-pointer transition-colors" id="mode-fast-label">
+                            <input type="radio" name="detection-mode" id="mode-fast" value="fast" checked class="text-blue-500">
+                            <div>
+                                <span class="text-sm font-medium text-dark-100">Fast</span>
+                                <p class="text-xs text-dark-400">Audio energy analysis. Best for streams, reactions, debates.</p>
+                            </div>
+                        </label>
+                        <label class="flex-1 flex items-center gap-2 bg-dark-800 border border-dark-600 rounded-lg px-4 py-3 cursor-pointer transition-colors" id="mode-smart-label">
+                            <input type="radio" name="detection-mode" id="mode-smart" value="smart" class="text-purple-500">
+                            <div>
+                                <span class="text-sm font-medium text-dark-100">Smart</span>
+                                <p class="text-xs text-dark-400">AI semantic analysis. Best for podcasts, interviews, tutorials.</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- LLM Options (shown when Smart mode selected) -->
+                <div id="llm-options" class="mt-4 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-dark-300 mb-2">AI Provider</label>
+                            <select id="llm-provider" class="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-dark-100">
+                                <option value="openai">OpenAI (GPT-4o-mini)</option>
+                                <option value="anthropic">Anthropic (Claude Sonnet)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-dark-300 mb-2">API Key</label>
+                            <input type="password" id="llm-api-key" placeholder="sk-..."
+                                class="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-dark-100 placeholder-dark-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-dark-300 mb-2">Model (optional)</label>
+                            <input type="text" id="llm-model" placeholder="Default model"
+                                class="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-dark-100 placeholder-dark-500">
+                        </div>
+                    </div>
+                </div>
+
+                <script>
+                    document.querySelectorAll('input[name="detection-mode"]').forEach(radio => {
+                        radio.addEventListener('change', () => {
+                            const llmDiv = document.getElementById('llm-options');
+                            const fastLabel = document.getElementById('mode-fast-label');
+                            const smartLabel = document.getElementById('mode-smart-label');
+                            if (document.getElementById('mode-smart').checked) {
+                                llmDiv.classList.remove('hidden');
+                                smartLabel.classList.add('border-purple-500');
+                                smartLabel.classList.remove('border-dark-600');
+                                fastLabel.classList.remove('border-blue-500');
+                                fastLabel.classList.add('border-dark-600');
+                            } else {
+                                llmDiv.classList.add('hidden');
+                                fastLabel.classList.add('border-blue-500');
+                                fastLabel.classList.remove('border-dark-600');
+                                smartLabel.classList.remove('border-purple-500');
+                                smartLabel.classList.add('border-dark-600');
+                            }
+                        });
+                    });
+                </script>
+
                 <!-- Enhancement Options -->
                 <div class="mt-4">
                     <label class="block text-sm font-medium text-dark-300 mb-2">Enhancement</label>

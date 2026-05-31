@@ -35,7 +35,7 @@ async function apiGetVideoInfo(url) {
     return res.json();
 }
 
-async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement) {
+async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement, introOutro) {
     const res = await fetch(`${API_BASE}/process`, {
         method: 'POST',
         headers: authHeaders(),
@@ -46,6 +46,7 @@ async function apiStartProcess(url, clipDuration, subtitleLang, aspectRatio, num
             aspect_ratio: aspectRatio,
             num_highlights: numHighlights,
             enhancement,
+            intro_outro: introOutro,
         }),
     });
     if (res.status === 401) {
@@ -80,6 +81,10 @@ function apiGetPreviewUrl(jobId, index) {
 
 function apiGetDownloadUrl(jobId, index) {
     return `${API_BASE}/download/${jobId}/${index}?token=${encodeURIComponent(getToken())}`;
+}
+
+function apiGetSrtDownloadUrl(jobId, index) {
+    return `${API_BASE}/download-srt/${jobId}/${index}?token=${encodeURIComponent(getToken())}`;
 }
 
 async function apiConfirmHighlights(jobId, highlights) {

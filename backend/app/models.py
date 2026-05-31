@@ -40,6 +40,15 @@ class EnhancementOptions(BaseModel):
     color_correct: bool = True
     denoise: bool = True
     audio_normalize: bool = True
+    karaoke_subs: bool = False
+    export_srt: bool = False
+    add_intro: bool = False
+    add_outro: bool = False
+
+
+class IntroOutroOptions(BaseModel):
+    intro_text: str = ""
+    outro_text: str = ""
 
 
 class ProcessRequest(BaseModel):
@@ -49,6 +58,7 @@ class ProcessRequest(BaseModel):
     aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE
     num_highlights: int = 3
     enhancement: EnhancementOptions = EnhancementOptions()
+    intro_outro: IntroOutroOptions = IntroOutroOptions()
 
     @field_validator("num_highlights")
     @classmethod

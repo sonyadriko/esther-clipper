@@ -133,7 +133,14 @@ function renderClipCard(jobId, output) {
     downloadBtn.className = 'flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-medium text-center transition-colors text-sm';
     downloadBtn.textContent = 'Download MP4';
 
+    const srtBtn = document.createElement('a');
+    srtBtn.href = apiGetSrtDownloadUrl(jobId, output.index);
+    srtBtn.download = true;
+    srtBtn.className = 'bg-dark-600 hover:bg-dark-500 text-dark-200 py-2 px-4 rounded-lg font-medium text-center transition-colors text-sm';
+    srtBtn.textContent = 'SRT';
+
     btnRow.appendChild(downloadBtn);
+    btnRow.appendChild(srtBtn);
 
     card.appendChild(header);
     if (hl.text) card.appendChild(text);

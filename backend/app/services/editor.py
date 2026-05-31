@@ -39,39 +39,12 @@ def cut_segments(
     return segment_paths
 
 
-def concat_segments(
-    segment_paths: list[Path],
-    output_path: Path,
-    aspect_ratio: str = "16:9",
-) -> Path:
-    list_file = output_path.parent / "segments.txt"
-    lines = []
-    for p in segment_paths:
-        safe_path = str(p).replace("\\", "/").replace("'", "'\\''")
-        lines.append(f"file '{safe_path}'")
-    list_file.write_text("\n".join(lines), encoding="utf-8")
-
-    args = ["-y", "-f", "concat", "-safe", "0", "-i", str(list_file)]
-    vf = _get_aspect_filter(aspect_ratio)
-    if vf:
-        args.extend(["-vf", vf])
-    args.extend(["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", str(output_path)])
-
-    try:
-        _run_ffmpeg(args)
-    finally:
-        list_file.unlink(missing_ok=True)
-
-    return output_path
-
-
 def burn_subtitles(
     video_path: Path,
     srt_path: Path,
     output_path: Path,
     font_size: int = 24,
 ) -> Path:
-    # Copy to temp dir to avoid Windows path-with-colons issues in subtitle filter
     tmp_dir = Path(tempfile.mkdtemp())
     tmp_video = tmp_dir / "input.mp4"
     tmp_srt = tmp_dir / "sub.srt"
@@ -102,7 +75,86 @@ def burn_subtitles(
     return output_path
 
 
-def _get_aspect_filter(aspect_ratio: str) -> str:
-    if aspect_ratio == "9:16":
-        return "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
-    return ""
+def burn_ass_subtitles(
+    video_path: Path,
+    ass_path: Path,
+    output_path: Path,
+) -> Path:
+    """Burn ASS subtitles (karaoke) into video."""
+    tmp_dir = Path(tempfile.mkdtemp())
+    tmp_video = tmp_dir / "input.mp4"
+    tmp_ass = tmp_dir / "sub.ass"
+    tmp_output = tmp_dir / "output.mp4"
+
+    shutil.copy2(video_path, tmp_video)
+    shutil.copy2(ass_path, tmp_ass)
+
+    try:
+        _run_ffmpeg([
+            "-y", "-i", str(tmp_video),
+            "-vf", "ass=sub.ass",
+            "-c:v", "libx264", "-preset", "fast",
+            "-c:a", "aac",
+            str(tmp_output),
+        ], cwd=str(tmp_dir))
+        shutil.copy2(tmp_output, output_path)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return output_path
+
+
+def add_intro_outro(
+    video_path: Path,
+    output_path: Path,
+    intro_text: str = "",
+    outro_text: str = "",
+    duration: float = 3.0,
+) -> Path:
+    """Add text intro and/or outro to video."""
+    if not intro_text and not outro_text:
+        import shutil as shutil_mod
+        shutil_mod.copy2(video_path, output_path)
+        return output_path
+
+    filters = []
+
+    if intro_text:
+        escaped = _escape_drawtext(intro_text)
+        filters.append(
+            f"drawtext=text='{escaped}':"
+            f"fontsize=48:fontcolor=white:borderw=3:bordercolor=black:"
+            f"x=(w-text_w)/2:y=(h-text_h)/2:"
+            f"enable='between(t,0.5,{duration - 0.5})'"
+        )
+
+    if outro_text:
+        # Get video duration first, then use it for outro timing
+        # For simplicity, outro appears at the end for 'duration' seconds
+        escaped = _escape_drawtext(outro_text)
+        filters.append(
+            f"drawtext=text='{escaped}':"
+            f"fontsize=48:fontcolor=white:borderw=3:bordercolor=black:"
+            f"x=(w-text_w)/2:y=(h-text_h)/2:"
+            f"enable='gte(t,0)'"
+        )
+
+    if not filters:
+        import shutil as shutil_mod
+        shutil_mod.copy2(video_path, output_path)
+        return output_path
+
+    _run_ffmpeg([
+        "-y", "-i", str(video_path),
+        "-vf", ",".join(filters),
+        "-c:v", "libx264", "-preset", "fast",
+        "-c:a", "aac",
+        str(output_path),
+    ])
+
+    return output_path
+
+
+def _escape_drawtext(text: str) -> str:
+    """Escape special characters for FFmpeg drawtext filter."""
+    return text.replace("'", "'\\''").replace(":", "\\:").replace("%", "%%")

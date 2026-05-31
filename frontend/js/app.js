@@ -80,6 +80,14 @@ async function startProcessing() {
         color_correct: document.getElementById('enh-color').checked,
         denoise: document.getElementById('enh-denoise').checked,
         audio_normalize: document.getElementById('enh-audio').checked,
+        karaoke_subs: document.getElementById('enh-karaoke').checked,
+        export_srt: document.getElementById('enh-srt').checked,
+        add_intro: document.getElementById('use-intro').checked,
+        add_outro: document.getElementById('use-outro').checked,
+    };
+    const intro_outro = {
+        intro_text: document.getElementById('intro-text').value.trim(),
+        outro_text: document.getElementById('outro-text').value.trim(),
     };
 
     editorHighlights = [];
@@ -88,7 +96,7 @@ async function startProcessing() {
     updateProgressBar(0, 'Starting...');
 
     try {
-        const { job_id } = await apiStartProcess(currentUrl, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement);
+        const { job_id } = await apiStartProcess(currentUrl, clipDuration, subtitleLang, aspectRatio, numHighlights, enhancement, intro_outro);
         currentJobId = job_id;
         startPolling(job_id);
     } catch (err) {

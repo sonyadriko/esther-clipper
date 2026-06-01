@@ -61,7 +61,9 @@ function renderVideoInfo(info) {
     document.getElementById('video-thumb').src = info.thumbnail;
     document.getElementById('video-title').textContent = info.title;
     document.getElementById('video-channel').textContent = info.channel;
-    document.getElementById('video-duration').textContent = `Duration: ${formatDuration(info.duration)}`;
+    const est = info.estimated_seconds || 0;
+    const estText = est > 60 ? `~${Math.ceil(est / 60)} min` : `~${est}s`;
+    document.getElementById('video-duration').textContent = `Duration: ${formatDuration(info.duration)} | Est. processing: ${estText}`;
 }
 
 function renderClipCard(jobId, output) {
@@ -111,10 +113,17 @@ function renderClipCard(jobId, output) {
     btnRow.appendChild(downloadBtn);
     btnRow.appendChild(srtBtn);
 
+    // Export settings summary
+    const summary = document.createElement('div');
+    summary.className = 'text-xs text-dark-500 mt-2';
+    const duration = hl.end - hl.start;
+    summary.textContent = `MP4 · H.264 · ${formatDuration(duration)} · 1080p`;
+
     card.appendChild(header);
     if (hl.text) card.appendChild(text);
     card.appendChild(video);
     card.appendChild(btnRow);
+    card.appendChild(summary);
 
     return card;
 }

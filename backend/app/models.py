@@ -51,6 +51,14 @@ class LLMOptions(BaseModel):
     model: str = ""
 
 
+class SubtitleStyle(BaseModel):
+    font: str = "Arial"
+    font_size: int = 24
+    color: str = "&HFFFFFF"  # ASS color format: &HBBGGRR
+    outline: int = 2
+    position: str = "bottom"  # bottom, top, center
+
+
 class EnhancementOptions(BaseModel):
     upscale: bool = True
     color_correct: bool = True
@@ -59,6 +67,7 @@ class EnhancementOptions(BaseModel):
     karaoke_subs: bool = False
     add_intro: bool = False
     add_outro: bool = False
+    subtitle_style: SubtitleStyle = SubtitleStyle()
 
 
 class IntroOutroOptions(BaseModel):
@@ -99,6 +108,7 @@ class VideoInfo(BaseModel):
     duration: int
     channel: str
     url: str
+    estimated_seconds: int = 0
 
 
 class HighlightSegment(BaseModel):
@@ -116,21 +126,9 @@ class HighlightSegment(BaseModel):
 
     @field_validator("end")
     @classmethod
-    def validate_end(cls, v: float) -> float:
+    def validate_end(cls, v: float, info) -> float:
         if v < 0:
             raise ValueError("End must be >= 0")
-        return v
-
-    @field_validator("start")
-    @classmethod
-    def validate_start(cls, v: float) -> float:
-        if v < 0:
-            raise ValueError("Start must be >= 0")
-        return v
-
-    @field_validator("end")
-    @classmethod
-    def validate_end(cls, v: float, info) -> float:
         if "start" in info.data and v <= info.data["start"]:
             raise ValueError("End must be greater than start")
         return v

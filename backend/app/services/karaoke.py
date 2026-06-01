@@ -14,7 +14,7 @@ def generate_ass(
         words = _get_words_in_range(transcript, highlight.start, highlight.end)
         if not words:
             continue
-        entries.extend(_words_to_ass_entries(words, highlight.start))
+        entries.extend(_words_to_ass_entries(words))
 
     content = _format_ass(entries)
     output_path.write_text(content, encoding="utf-8")
@@ -38,7 +38,6 @@ def _get_words_in_range(
 
 def _words_to_ass_entries(
     words: list[tuple[str, float, float]],
-    offset: float,
 ) -> list[dict]:
     """Group words into lines and generate ASS karaoke tags."""
     entries = []
@@ -53,12 +52,12 @@ def _words_to_ass_entries(
 
         # New line after 4 seconds or 6 words
         if (end - line_start) >= 4.0 or len(line_words) >= 6:
-            entries.append(_make_ass_entry(line_words, line_start, end, offset))
+            entries.append(_make_ass_entry(line_words, line_start, end))
             line_words = []
             line_start = None
 
     if line_words:
-        entries.append(_make_ass_entry(line_words, line_start, words[-1][2], offset))
+        entries.append(_make_ass_entry(line_words, line_start, words[-1][2]))
 
     return entries
 
@@ -67,7 +66,6 @@ def _make_ass_entry(
     words: list[tuple[str, float, float]],
     line_start: float,
     line_end: float,
-    offset: float,
 ) -> dict:
     """Create a single ASS dialogue line with karaoke tags."""
     # \k tag takes duration in centiseconds
@@ -88,8 +86,8 @@ def _make_ass_entry(
     text = "".join(karaoke_parts)
 
     return {
-        "start": line_start + offset,
-        "end": line_end + offset,
+        "start": line_start,
+        "end": line_end,
         "text": text,
     }
 

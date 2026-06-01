@@ -51,6 +51,10 @@ def burn_subtitles(
     srt_path: Path,
     output_path: Path,
     font_size: int = 24,
+    font_name: str = "Arial",
+    color: str = "&HFFFFFF",
+    outline: int = 2,
+    position: str = "bottom",
 ) -> Path:
     tmp_dir = Path(tempfile.mkdtemp())
     tmp_video = tmp_dir / "input.mp4"
@@ -60,11 +64,14 @@ def burn_subtitles(
     shutil.copy2(video_path, tmp_video)
     shutil.copy2(srt_path, tmp_srt)
 
+    margin_v = _get_margin_v(position)
+
     subtitle_filter = (
         f"subtitles=sub.srt:force_style="
-        f"'FontSize={font_size},PrimaryColour=&HFFFFFF,"
-        f"OutlineColour=&H000000,Outline=2,Shadow=1,"
-        f"MarginV=30'"
+        f"'FontName={font_name},FontSize={font_size},"
+        f"PrimaryColour={color},"
+        f"OutlineColour=&H000000,Outline={outline},Shadow=1,"
+        f"MarginV={margin_v}'"
     )
 
     try:
@@ -113,9 +120,13 @@ def burn_ass_subtitles(
 
 def _get_video_duration(video_path: Path) -> float:
     """Get video duration in seconds using ffprobe."""
+    ffmpeg_path = Path(settings.FFMPEG_PATH)
+    suffix = ffmpeg_path.suffix
+    ffprobe_path = ffmpeg_path.with_name("ffprobe" + suffix)
+
     result = subprocess.run(
         [
-            settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
+            str(ffprobe_path),
             "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1",
             str(video_path),
@@ -141,6 +152,11 @@ def add_intro_outro(
         return output_path
 
     vid_duration = _get_video_duration(video_path)
+    if vid_duration <= 0:
+        print(f"WARNING: Could not determine video duration, skipping intro/outro")
+        shutil.copy2(video_path, output_path)
+        return output_path
+
     filters = []
 
     if intro_text:
@@ -181,3 +197,19 @@ def add_intro_outro(
 def _escape_drawtext(text: str) -> str:
     """Escape special characters for FFmpeg drawtext filter."""
     return text.replace("'", "'\\''").replace(":", "\\:").replace("%", "%%")
+
+
+def _get_aspect_filter(aspect_ratio: str) -> str:
+    """Return FFmpeg scale filter for the given aspect ratio."""
+    if aspect_ratio == "9:16":
+        return "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
+    return ""
+
+
+def _get_margin_v(position: str) -> int:
+    """Return vertical margin for subtitle position."""
+    if position == "top":
+        return 30
+    if position == "center":
+        return 200
+    return 30  # bottom default

@@ -18,19 +18,14 @@ def _find_project_root() -> Path:
 
 
 def _resolve_ffmpeg() -> tuple[str, Path | None]:
-    """Resolve ffmpeg path: env var > local install > system PATH."""
+    """Resolve ffmpeg path: env var > system PATH."""
     # 1. Check environment variable
     env_path = os.environ.get("FFMPEG_PATH")
     if env_path and Path(env_path).exists():
         p = Path(env_path)
         return str(p), p.parent if p.is_file() else p
 
-    # 2. Check common local install
-    local = Path("C:/Users/user/Videos/ms/ffmpeg/bin/ffmpeg.exe")
-    if local.exists():
-        return str(local), local.parent
-
-    # 3. Fallback to system PATH
+    # 2. Fallback to system PATH
     system = shutil.which("ffmpeg")
     if system:
         p = Path(system)

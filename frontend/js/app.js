@@ -103,6 +103,13 @@ async function startProcessing() {
         karaoke_subs: document.getElementById('enh-karaoke').checked,
         add_intro: document.getElementById('use-intro').checked,
         add_outro: document.getElementById('use-outro').checked,
+        subtitle_style: {
+            font: document.getElementById('sub-font').value,
+            font_size: parseInt(document.getElementById('sub-size').value, 10),
+            color: document.getElementById('sub-color').value,
+            position: document.getElementById('sub-position').value,
+            outline: 2,
+        },
     };
     const intro_outro = {
         intro_text: document.getElementById('intro-text').value.trim(),

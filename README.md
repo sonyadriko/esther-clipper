@@ -11,11 +11,14 @@ Automated YouTube highlight extractor — paste a YouTube link, get highlight cl
 - **Manual Highlight Editing** — review, add, remove, or adjust timestamps before processing
 - **Per-Highlight Output** — each highlight becomes a separate video (configurable 1-10 clips)
 - **Auto Subtitles** — SRT generation with word-level timestamps from Whisper
+- **Subtitle Style** — font (Arial/Impact/Verdana/Courier), size (S/M/L/XL), color (white/yellow/cyan/green), position (bottom/top/center)
 - **Karaoke Subtitles** — word-by-word ASS animation (toggle)
 - **Video Enhancement** — upscale to 1080p, color correction, denoise, audio normalization (toggles)
 - **Intro/Outro Overlays** — add text overlays at start/end of each clip
 - **SRT Export** — download .srt file per highlight
 - **Aspect Ratio** — 16:9 standard or 9:16 Shorts/Reels
+- **Estimated Processing Time** — shown before you start
+- **Export Settings Summary** — MP4 format, codec, resolution shown per clip
 - **Dark UI** — single-page workflow with real-time progress
 
 ## Tech Stack
@@ -52,6 +55,9 @@ Edit `.env`:
 ```env
 API_TOKEN=your-secret-token
 
+# FFmpeg path (optional, defaults to system PATH)
+# FFMPEG_PATH=C:/ffmpeg/bin/ffmpeg.exe
+
 # For Smart detection mode (optional)
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
@@ -77,7 +83,7 @@ docker-compose up --build
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/video-info?url=` | Fetch YouTube video metadata |
+| `GET` | `/api/video-info?url=` | Fetch YouTube video metadata + estimated time |
 | `POST` | `/api/process` | Start pipeline (Phase 1: detect) |
 | `POST` | `/api/confirm/{job_id}` | Confirm edited highlights (Phase 2: process) |
 | `GET` | `/api/status/{job_id}` | Poll progress |
@@ -109,7 +115,14 @@ All endpoints require `Authorization: Bearer <token>` header (except video/downl
     "audio_normalize": true,
     "karaoke_subs": false,
     "add_intro": false,
-    "add_outro": false
+    "add_outro": false,
+    "subtitle_style": {
+      "font": "Arial",
+      "font_size": 24,
+      "color": "&HFFFFFF",
+      "outline": 2,
+      "position": "bottom"
+    }
   },
   "intro_outro": {
     "intro_text": "",
@@ -133,18 +146,18 @@ shortez/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI app
-│   │   ├── config.py            # Settings
+│   │   ├── config.py            # Settings (env vars)
 │   │   ├── models.py            # Pydantic schemas
 │   │   ├── auth.py              # Bearer token auth
 │   │   ├── routes/
-│   │   │   ├── pipeline.py      # API endpoints + pipeline
-│   │   │   └── config.py        # Config endpoint
+│   │   │   ├── pipeline.py      # API endpoints + pipeline phases
+│   │   │   └── config.py        # Config endpoint (localhost only)
 │   │   ├── services/
-│   │   │   ├── downloader.py    # YouTube download
+│   │   │   ├── downloader.py    # YouTube download + estimated time
 │   │   │   ├── transcriber.py   # Whisper transcription
 │   │   │   ├── highlighter.py   # Rule-based detection
-│   │   │   ├── llm_highlighter.py # LLM detection
-│   │   │   ├── editor.py        # FFmpeg video editing
+│   │   │   ├── llm_highlighter.py # LLM detection (OpenAI/Anthropic)
+│   │   │   ├── editor.py        # FFmpeg video editing + subtitle burn
 │   │   │   ├── subtitle.py      # SRT generation
 │   │   │   ├── karaoke.py       # ASS karaoke generation
 │   │   │   └── enhancer.py      # Video enhancement
@@ -162,6 +175,8 @@ shortez/
 │       └── app.js               # App logic
 ├── .env                         # Config (gitignored)
 ├── .env.example
+├── CLAUDE.md                    # Claude Code guidance
+├── RULE.md                      # Communication rules
 ├── docker-compose.yml
 └── storage/                     # Temp files (gitignored)
 ```
@@ -178,7 +193,7 @@ shortez/
 - Sends full transcript to LLM
 - AI identifies jokes, hot takes, emotional peaks, quotable moments
 - Returns ranked segments with reasons
-- Requires API key (OpenAI or Anthropic)
+- API key validated before downloading video (fail fast)
 - Costs ~$0.03-0.10 per video
 
 ## Enhancement Options
@@ -190,16 +205,23 @@ shortez/
 | Denoise | hqdn3d noise reduction |
 | Audio Norm | EBU R128 loudness normalization (-16 LUFS) |
 | Karaoke Subs | Word-by-word ASS subtitle animation |
-| Intro/Outro | Text overlay at start/end of clip |
+
+## Subtitle Style
+
+| Option | Values |
+|--------|--------|
+| Font | Arial, Impact, Verdana, Courier New |
+| Size | Small (20), Medium (24), Large (32), XL (40) |
+| Color | White, Yellow, Cyan, Green |
+| Position | Bottom, Top, Center |
 
 ## Limitations
 
-- In-memory job storage (lost on restart)
+- In-memory job storage with 24h cleanup
 - No user accounts (single API token)
-- No video quality enhancement beyond FFmpeg filters
 - No subtitle translation (source language only)
+- No batch processing
 
 ## License
 
 MIT
-"# esther-clipper"

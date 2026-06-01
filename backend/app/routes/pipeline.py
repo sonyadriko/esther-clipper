@@ -1,4 +1,5 @@
 import asyncio
+import time
 import traceback
 from pathlib import Path
 
@@ -31,9 +32,20 @@ router = APIRouter(prefix="/api")
 
 jobs: dict[str, JobStatus] = {}
 pipeline_context: dict[str, dict] = {}
+job_timestamps: dict[str, float] = {}
+
+
+def _cleanup_old_jobs():
+    """Remove completed/errored jobs older than the last 10."""
+    done = [jid for jid, j in jobs.items() if j.stage in (PipelineStage.COMPLETE, PipelineStage.ERROR)]
+    if len(done) > 10:
+        for jid in done[:-10]:
+            jobs.pop(jid, None)
+            pipeline_context.pop(jid, None)
 
 
 def _active_job_count() -> int:
+    _cleanup_old_jobs()
     return sum(
         1 for j in jobs.values()
         if j.stage not in (PipelineStage.COMPLETE, PipelineStage.ERROR)
@@ -75,6 +87,7 @@ async def start_process(
         message="Starting pipeline...",
         video_info=info,
     )
+    job_timestamps[job_id] = time.time()
 
     pipeline_context[job_id] = {
         "url": request.url,
@@ -120,6 +133,7 @@ async def confirm_highlights(
         raise HTTPException(status_code=400, detail="Pipeline context lost")
 
     job.highlights = request.highlights
+    job.stage = PipelineStage.EDITING  # Prevent double-submit
     bg.add_task(run_phase2, job_id)
 
     return {"status": "confirmed", "highlights": len(request.highlights)}
@@ -127,10 +141,26 @@ async def confirm_highlights(
 
 @router.get("/status/{job_id}")
 async def get_status(job_id: str, _: str = Depends(verify_token)):
+    _cleanup_old_jobs()
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+def _cleanup_old_jobs(max_age_seconds: int = 86400):
+    """Remove jobs older than max_age that are done or errored."""
+    now = time.time()
+    stale = [
+        jid for jid, ts in job_timestamps.items()
+        if now - ts > max_age_seconds
+        and jid in jobs
+        and jobs[jid].stage in (PipelineStage.COMPLETE, PipelineStage.ERROR)
+    ]
+    for jid in stale:
+        jobs.pop(jid, None)
+        job_timestamps.pop(jid, None)
+        pipeline_context.pop(jid, None)
 
 
 @router.get("/preview/{job_id}/{index}")
@@ -226,7 +256,7 @@ async def run_phase1(
 
         _update_job(job_id, PipelineStage.TRANSCRIBING, 30, "Transcribing audio...")
         audio_path = await asyncio.to_thread(extract_audio, video_path)
-        whisper_lang = ctx.get("subtitle_lang")
+        whisper_lang = pipeline_context[job_id].get("subtitle_lang")
         lang_code = whisper_lang.value if whisper_lang else None
         transcript = await asyncio.to_thread(transcriber.transcribe, audio_path, lang_code)
 
@@ -304,8 +334,12 @@ async def run_phase2(job_id: str):
                 sub_path = output_dir / f"highlight_{i:03d}_sub.mp4"
                 await asyncio.to_thread(editor.burn_ass_subtitles, segment_paths[0], ass_path, sub_path)
             else:
+                style = enhancement.subtitle_style
                 sub_path = output_dir / f"highlight_{i:03d}_sub.mp4"
-                await asyncio.to_thread(editor.burn_subtitles, segment_paths[0], srt_path, sub_path)
+                await asyncio.to_thread(
+                    editor.burn_subtitles, segment_paths[0], srt_path, sub_path,
+                    style.font_size, style.font, style.color, style.outline, style.position,
+                )
 
             # Intro/outro
             has_intro = enhancement.add_intro and intro_outro.intro_text
